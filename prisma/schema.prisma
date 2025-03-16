@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,8 +7,265 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Address {
+  id         Int        @id @default(autoincrement())
+  street     String?    @db.VarChar(255)
+  city       String?    @db.VarChar(100)
+  zip_code   String?    @db.VarChar(20)
+  country    String?    @db.VarChar(100)
+  created_at DateTime?  @default(now()) @db.DateTime(0)
+  updated_at DateTime?  @updatedAt
+  building   Building[]
+
+  @@index([id], map: "ix_address_id")
+}
+
+model Alembic_version {
+  version_num String @id @db.VarChar(32)
+}
+
+model Building {
+  id                    Int                     @id @default(autoincrement())
+  name                  String                  @db.VarChar(255)
+  address_id            Int?
+  created_at            DateTime?               @default(now()) @db.DateTime(0)
+  updated_at            DateTime?               @updatedAt
+  address               Address?                @relation(fields: [address_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "building_ibfk_1")
+  room                  Room[]
+  building_organization Building_organization[]
+  technician_task       Technician_task[]
+  alert_threshold       Alert_threshold[]
+
+  @@index([address_id], map: "address_id")
+  @@index([id], map: "ix_building_id")
+}
+
+model Measurement {
+  id                   Int                @id @default(autoincrement())
+  sensor_assignment_id Int?
+  value                Float              @db.Float
+  unit                 String?
+  measured_at          DateTime?          @default(now()) @db.DateTime(0)
+  created_at           DateTime?          @default(now()) @db.DateTime(0)
+  sensor_assignment    Sensor_assignment? @relation(fields: [sensor_assignment_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "measurement_ibfk_1")
+  alert                Alert[]
+
+  @@index([id], map: "ix_measurement_id")
+  @@index([sensor_assignment_id], map: "sensor_assignment_id")
+}
+
+model Organization {
+  id                    Int                     @id @default(autoincrement())
+  name                  String                  @unique(map: "name") @db.VarChar(255)
+  created_at            DateTime?               @default(now()) @db.DateTime(0)
+  updated_at            DateTime?               @updatedAt
+  building_organization Building_organization[]
+  user_organization     User_organization[]
+  alert_threshold       Alert_threshold[]
+
+  @@index([id], map: "ix_organization_id")
+}
+
+model Building_organization {
+  building_id     Int
+  organization_id Int
+  created_at      DateTime?    @default(now()) @db.DateTime(0)
+  building        Building     @relation(fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([building_id, organization_id])
+  @@index([organization_id], map: "organization_id")
+}
+
+model Role {
+  id         Int         @id @default(autoincrement())
+  label      String      @unique(map: "label") @db.VarChar(100)
+  created_at DateTime?   @default(now()) @db.DateTime(0)
+  updated_at DateTime?   @updatedAt
+  user_role  User_role[]
+
+  @@index([id], map: "ix_role_id")
+}
+
+model Room {
+  id                Int                 @id @default(autoincrement())
+  name              String              @db.VarChar(255)
+  is_occupied       Boolean?
+  building_id       Int?
+  created_at        DateTime?           @default(now()) @db.DateTime(0)
+  updated_at        DateTime?           @updatedAt
+  building          Building?           @relation(fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "room_ibfk_1")
+  sensor            Sensor[]
+  sensor_assignment Sensor_assignment[]
+  technician_task   Technician_task[]
+  alert_threshold   Alert_threshold[]
+
+  @@index([building_id], map: "building_id")
+  @@index([id], map: "ix_room_id")
+}
+
+model Sensor_type {
+  id              Int               @id @default(autoincrement())
+  name            String            @unique
+  description     String?
+  unit            String?
+  min_value       Float?
+  max_value       Float?
+  sensors         Sensor[]
+  alert_threshold Alert_threshold[]
+}
+
+model Sensor {
+  id                   Int                 @id @default(autoincrement())
+  name                 String?
+  serial_number        String?
+  qr_code_path         String?             @db.Text
+  room_id              Int?
+  sensor_type_id       Int?
+  status               String              @default("status") // active, maintenance, offline, calibration
+  manufacturer         String?
+  model                String?
+  protocol             String? // MQTT, REST, etc.
+  connection_details   Json? // Stockage flexible des informations de connexion
+  installation_date    DateTime?
+  last_calibration     DateTime?
+  next_calibration_due DateTime?
+  created_at           DateTime?           @default(now()) @db.DateTime(0)
+  updated_at           DateTime?           @updatedAt
+  room                 Room?               @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sensor_ibfk_1")
+  sensor_assignment    Sensor_assignment[]
+  sensor_type          Sensor_type?        @relation(fields: [sensor_type_id], references: [id])
+  technician_task      Technician_task[]
+
+  @@index([id], map: "ix_sensor_id")
+  @@index([room_id], map: "room_id")
+}
+
+model Sensor_assignment {
+  id          Int           @id @default(autoincrement())
+  sensor_id   Int?
+  room_id     Int?
+  start_date  DateTime?     @default(now()) @db.DateTime(0)
+  end_date    DateTime?     @db.DateTime(0)
+  measurement Measurement[]
+  room        Room?         @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sensor_assignment_ibfk_1")
+  sensor      Sensor?       @relation(fields: [sensor_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sensor_assignment_ibfk_2")
+  alert       Alert[]
+
+  @@index([id], map: "ix_sensor_assignment_id")
+  @@index([room_id], map: "room_id")
+  @@index([sensor_id], map: "sensor_id")
+}
+
 model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
+  id                Int                 @id @default(autoincrement())
+  first_name        String              @db.VarChar(100)
+  last_name         String              @db.VarChar(100)
+  email             String              @unique(map: "ix_user_email") @db.VarChar(255)
+  phone             String?             @unique(map: "ix_user_phone") @db.VarChar(30)
+  password          String              @db.VarChar(255)
+  created_at        DateTime?           @default(now()) @db.DateTime(0)
+  updated_at        DateTime?           @updatedAt
+  user_organization User_organization[]
+  user_role         User_role[]
+  technician_task   Technician_task[]
+  alert             Alert[]
+
+  @@index([id], map: "ix_user_id")
+}
+
+model User_organization {
+  user_id         Int
+  organization_id Int
+  created_at      DateTime?    @default(now()) @db.DateTime(0)
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_organization_ibfk_1")
+  user            User         @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_organization_ibfk_2")
+
+  @@id([user_id, organization_id])
+  @@index([organization_id], map: "organization_id")
+}
+
+model User_role {
+  user_id    Int
+  role_id    Int
+  created_at DateTime? @default(now()) @db.DateTime(0)
+  role       Role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ibfk_1")
+  user       User      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ibfk_2")
+
+  @@id([user_id, role_id])
+  @@index([role_id], map: "role_id")
+}
+
+model Technician_task {
+  id             Int       @id @default(autoincrement())
+  title          String
+  description    String?   @db.Text
+  status         String    @default("pending") // pending, in_progress, completed, cancelled
+  priority       String    @default("medium") // low, medium, high, urgent
+  assigned_to    Int? // ID de l'utilisateur (technicien)
+  sensor_id      Int?
+  room_id        Int?
+  building_id    Int?
+  scheduled_date DateTime?
+  completed_date DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  user     User?     @relation(fields: [assigned_to], references: [id])
+  sensor   Sensor?   @relation(fields: [sensor_id], references: [id])
+  room     Room?     @relation(fields: [room_id], references: [id])
+  building Building? @relation(fields: [building_id], references: [id])
+}
+
+model Alert_threshold {
+  id                Int      @id @default(autoincrement())
+  name              String // Nom descriptif comme "CO2 élevé" ou "Température excessive"
+  sensor_type_id    Int? // Type de capteur concerné
+  organization_id   Int? // Pour des seuils spécifiques à une organisation
+  building_id       Int? // Pour des seuils spécifiques à un bâtiment
+  room_id           Int? // Pour des seuils spécifiques à une pièce
+  min_value         Float? // Seuil minimum (ex: température trop basse)
+  max_value         Float? // Seuil maximum (ex: CO2 trop élevé)
+  duration_minutes  Int? // Durée minimale avant déclenchement (évite les fausses alertes)
+  severity          String   @default("warning") // info, warning, critical
+  notification_type String   @default("email") // email, sms, push, webhook
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  sensor_type  Sensor_type?  @relation(fields: [sensor_type_id], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
+  building     Building?     @relation(fields: [building_id], references: [id], onDelete: SetNull)
+  room         Room?         @relation(fields: [room_id], references: [id], onDelete: SetNull)
+  alerts       Alert[] // Historique des alertes générées
+
+  @@index([sensor_type_id])
+  @@index([organization_id])
+  @@index([building_id])
+  @@index([room_id])
+}
+
+model Alert {
+  id                   Int       @id @default(autoincrement())
+  alert_threshold_id   Int
+  sensor_assignment_id Int?
+  measurement_id       Int?
+  triggered_at         DateTime  @default(now())
+  resolved_at          DateTime?
+  value                Float // Valeur qui a déclenché l'alerte
+  status               String    @default("active") // active, acknowledged, resolved
+  acknowledged_by      Int? // ID de l'utilisateur qui a pris en charge l'alerte
+  resolution_notes     String?   @db.Text
+
+  // Relations
+  alert_threshold   Alert_threshold    @relation(fields: [alert_threshold_id], references: [id])
+  sensor_assignment Sensor_assignment? @relation(fields: [sensor_assignment_id], references: [id], onDelete: SetNull)
+  measurement       Measurement?       @relation(fields: [measurement_id], references: [id], onDelete: SetNull)
+  user              User?              @relation(fields: [acknowledged_by], references: [id], onDelete: SetNull)
+
+  @@index([alert_threshold_id])
+  @@index([sensor_assignment_id])
+  @@index([measurement_id])
+  @@index([acknowledged_by])
 }

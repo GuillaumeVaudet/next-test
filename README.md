@@ -34,3 +34,19 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### Pour le futur readme : 
+
+const roles = [
+{ label: 'god', description: 'Accès total au système' },
+{ label: 'chibani', description: 'Super utilisateur avec accès étendu' },
+{ label: 'sale', description: 'Utilisateur avec privilèges étendus' },
+{ label: 'tech', description: 'Technicien' },
+{ label: 'admin', description: 'Administrateur' },
+{ label: 'manager', description: 'Gestionnaire' },
+{ label: 'coordinator', description: 'Coordinateur' },
+{ label: 'task owner', description: 'Responsable de tâches' },
+{ label: 'user', description: 'Utilisateur standard' }
+];
+
+lancer le seed.js pour prisma pour avoir les rôles de base

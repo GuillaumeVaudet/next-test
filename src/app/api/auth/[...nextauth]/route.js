@@ -1,28 +1,79 @@
 import NextAuth from 'next-auth/next';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import bcrypt from 'bcrypt';
+import { db } from '@/lib/db';
 
-const handler = NextAuth({
+export const authOptions = {
+  adapter: PrismaAdapter(db),
+  session: {
+    strategy: "jwt",
+  },
+  pages: {
+    signIn: "/login",
+  },
   providers: [
-      CredentialsProvider({
-        name: 'AirSafeAuth',
-        credentials: {
-          email: { label: "E-mail", type: 'text', placeholder: 'Votre Email' },
-          password: { label: "Password", type: 'password', placeholder: 'Votre mot de passe' },
-        },
-        async authorize(credentials, res) {
-          const response = await fetch('http://localhost:3000/api/login', {
-            method: 'POST',
-            body: JSON.stringify({
-              email: credentials?.email,
-              password: credentials?.password,
-            }),
-          });
-          const user = await response.json();
-
-          return user || null;
+    CredentialsProvider({
+      name: 'AirSafeAuth',
+      credentials: {
+        email: { label: "E-mail", type: 'text', placeholder: 'Votre Email' },
+        password: { label: "Password", type: 'password', placeholder: 'Votre mot de passe' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
         }
-      })
-  ]
-});
+
+        const user = await db.user.findUnique({
+          where: {
+            email: credentials.email
+          }
+        });
+
+        if (!user || !user.password) {
+          return null;
+        }
+
+        const passwordMatch = await bcrypt.compare(
+            credentials.password,
+            user.password
+        );
+
+        if (!passwordMatch) {
+          return null;
+        }
+
+        return {
+          id: user.id.toString(),
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+        };
+      }
+    })
+  ],
+  callbacks: {
+    async session({ session, token }) {
+      if (token) {
+        session.user.id = token.id;
+        session.user.name = token.name;
+        session.user.email = token.email;
+        session.user.role = token.role;
+        session.user.image = token.picture;
+      }
+      return session;
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
+      }
+      return token;
+    }
+  }
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
