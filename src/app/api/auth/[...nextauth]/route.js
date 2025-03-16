@@ -2,10 +2,10 @@ import NextAuth from 'next-auth/next';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from 'bcrypt';
-import { db } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 export const authOptions = {
-  adapter: PrismaAdapter(db),
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
   },
@@ -24,7 +24,7 @@ export const authOptions = {
           return null;
         }
 
-        const user = await db.user.findUnique({
+        const user = await prisma.user.findUnique({
           where: {
             email: credentials.email
           }

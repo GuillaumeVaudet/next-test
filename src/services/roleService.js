@@ -1,9 +1,9 @@
-import {db} from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 export const roleService = {
 
   async getAllRoles() {
-    return db.role.findMany({
+    return prisma.role.findMany({
       orderBy: {
         label: 'asc'
       }
@@ -11,25 +11,25 @@ export const roleService = {
   },
 
   async getRoleById(id) {
-    return db.role.findUnique({
+    return prisma.role.findUnique({
       where: { id }
     });
   },
 
   async getRoleByLabel(label) {
-    return db.role.findUnique({
+    return prisma.role.findUnique({
       where: { label }
     });
   },
 
   async createRole(label) {
-    return db.role.create({
+    return prisma.role.create({
       data: { label }
     });
   },
 
   async deleteRole(id) {
-    return db.role.delete({
+    return prisma.role.delete({
       where: { id }
     });
   },
