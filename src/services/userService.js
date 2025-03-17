@@ -1,5 +1,5 @@
 // userService.js
-import { prisma } from '@/lib/db'; // On importe l'instance Prisma
+import { prisma } from '@/lib/prisma'; // On importe l'instance Prisma
 import bcrypt from 'bcrypt'; // Pour le hachage des mots de passe
 
 /**
@@ -19,7 +19,6 @@ export async function getAllUsers(options = {}) {
     sortOrder = 'desc'
   } = options;
 
-  // Construction de l'objet d'inclusion pour les relations
   const include = {};
 
   if (includeRoles) {
@@ -46,11 +45,9 @@ export async function getAllUsers(options = {}) {
     include.alert = true;
   }
 
-  // Construction de l'objet de tri
   const orderBy = {};
   orderBy[sortField] = sortOrder;
 
-  // Exécution de la requête avec Prisma
   return prisma.user.findMany({
     skip,
     take,
@@ -73,7 +70,6 @@ export async function getUserById(id, options = {}) {
     includeAlerts = false
   } = options;
 
-  // Construction de l'objet d'inclusion pour les relations
   const include = {};
 
   if (includeRoles) {
@@ -120,7 +116,6 @@ export async function getUserByEmail(email, options = {}) {
     includeAlerts = false
   } = options;
 
-  // Construction de l'objet d'inclusion pour les relations
   const include = {};
 
   if (includeRoles) {
@@ -167,7 +162,6 @@ export async function getUserByPhone(phone, options = {}) {
     includeAlerts = false
   } = options;
 
-  // Construction de l'objet d'inclusion pour les relations
   const include = {};
 
   if (includeRoles) {
@@ -201,75 +195,124 @@ export async function getUserByPhone(phone, options = {}) {
 }
 
 /**
- * Crée un nouvel utilisateur
+ * Crée un nouvel utilisateur avec ses relations
  * @param {Object} userData - Données de l'utilisateur
- * @returns {Promise<Object>} Utilisateur créé
+ * @param {Array} roles - IDs des rôles à attribuer
+ * @param {Array} organizations - IDs des organisations à associer
+ * @returns {Promise<Object>} L'utilisateur créé
  */
-export async function createUser(userData) {
-  // Extraction des données pour les relations
-  const { roles, organizations, ...userInfo } = userData;
-
-  // On vérifie si un mot de passe est fourni
-  if (userInfo.password) {
-    // Hachage du mot de passe avant stockage
-    const salt = await bcrypt.genSalt(10);
-    userInfo.password = await bcrypt.hash(userInfo.password, salt);
+export async function createUser(userData, roles = [], organizations = []) {
+  if (userData.password) {
+    userData.password = await bcrypt.hash(userData.password, 10);
   }
 
-  // Préparation des données pour les relations
-  const userRoles = Array.isArray(roles) ? roles.map(roleId => ({
-    role: { connect: { id: parseInt(roleId) } }
-  })) : [];
-
-  const userOrgs = Array.isArray(organizations) ? organizations.map(orgId => ({
-    organization: { connect: { id: parseInt(orgId) } }
-  })) : [];
-
-  // Création de l'utilisateur avec ses relations
-  return prisma.user.create({
-    data: {
-      ...userInfo,
-      user_role: {
-        create: userRoles
-      },
-      user_organization: {
-        create: userOrgs
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        email: userData.email,
+        password: userData.password,
+        phone: userData.phone,
       }
-    },
-    include: {
-      user_role: {
-        include: {
-          role: true
-        }
-      },
-      user_organization: {
-        include: {
-          organization: true
-        }
-      }
+    });
+
+    if (roles.length > 0) {
+      const roleData = roles.map(roleId => ({
+        user_id: user.id,
+        role_id: parseInt(roleId)
+      }));
+
+      await tx.user_role.createMany({
+        data: roleData
+      });
     }
+
+    if (organizations.length > 0) {
+      const orgData = organizations.map(orgId => ({
+        user_id: user.id,
+        organization_id: parseInt(orgId)
+      }));
+
+      await tx.user_organization.createMany({
+        data: orgData
+      });
+    }
+
+    return tx.user.findUnique({
+      where: { id: user.id },
+      include: {
+        user_role: { include: { role: true } },
+        user_organization: { include: { organization: true } }
+      }
+    });
   });
 }
 
 /**
- * Met à jour les informations d'un utilisateur
- * @param {number} id - ID de l'utilisateur
- * @param {Object} userData - Nouvelles données
- * @returns {Promise<Object>} Utilisateur mis à jour
+ * Met à jour un utilisateur et ses relations
  */
-export async function updateUser(id, userData) {
-  const { roles, organizations, ...userInfo } = userData;
+export async function updateUser(id, userData, { roles, organizations } = {}) {
+  const userId = parseInt(id);
 
-  // Si le mot de passe est présent dans les données, on le hache
-  if (userInfo.password) {
-    const salt = await bcrypt.genSalt(10);
-    userInfo.password = await bcrypt.hash(userInfo.password, salt);
-  }
+  return prisma.$transaction(async (tx) => {
+    // Mise à jour des informations utilisateur
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: {
+        first_name: userData.first_name,
+        last_name: userData.lastName,
+        email: userData.email,
+        phone: userData.phone,
+        is_active: userData.isActive
+        // Note: éviter de mettre à jour le mot de passe ici,
+        // créer une fonction séparée pour ça
+      }
+    });
 
-  // Mise à jour de l'utilisateur
-  return prisma.user.update({
-    where: { id: parseInt(id) },
-    data: userInfo
+    // Mise à jour des rôles si fournis
+    if (roles) {
+      // Supprimer les rôles existants
+      await tx.user_role.deleteMany({
+        where: { user_id: userId }
+      });
+
+      // Ajouter les nouveaux rôles
+      if (roles.length > 0) {
+        await tx.user_role.createMany({
+          data: roles.map(roleId => ({
+            user_id: userId,
+            role_id: parseInt(roleId)
+          }))
+        });
+      }
+    }
+
+    // Mise à jour des organisations si fournies
+    if (organizations) {
+      // Logique similaire pour les organisations
+      await tx.user_organization.deleteMany({
+        where: { user_id: userId }
+      });
+
+      if (organizations.length > 0) {
+        await tx.user_organization.createMany({
+          data: organizations.map(orgId => ({
+            user_id: userId,
+            organization_id: parseInt(orgId)
+          }))
+        });
+      }
+    }
+
+    // Récupérer l'utilisateur mis à jour avec ses relations
+    return tx.user.findUnique({
+      where: { id: userId },
+      include: {
+        user_role: { include: { role: true } },
+        user_organization: { include: { organization: true } }
+      }
+    });
   });
 }
 
@@ -279,22 +322,16 @@ export async function updateUser(id, userData) {
  * @returns {Promise<Object>} Utilisateur supprimé
  */
 export async function deleteUser(id) {
-  // En raison des relations, nous devons d'abord supprimer les entrées dans les tables de jointure
 
-  // Suppression des rôles associés
   await prisma.user_role.deleteMany({
     where: { user_id: parseInt(id) }
   });
 
-  // Suppression des organisations associées
   await prisma.user_organization.deleteMany({
     where: { user_id: parseInt(id) }
   });
 
-  // Si l'utilisateur a des tâches de technicien ou des alertes associées,
-  // il faudrait les gérer aussi selon la logique métier
 
-  // Suppression de l'utilisateur
   return prisma.user.delete({
     where: { id: parseInt(id) }
   });
@@ -388,7 +425,6 @@ export async function verifyUserCredentials(email, password) {
   const passwordValid = await bcrypt.compare(password, user.password);
   if (!passwordValid) return null;
 
-  // On renvoie l'utilisateur sans son mot de passe pour la sécurité
   const { password: _, ...userWithoutPassword } = user;
   return userWithoutPassword;
 }
@@ -440,8 +476,8 @@ export async function getUserOrganizations(userId) {
  */
 export async function searchUsers(criteria) {
   const {
-    firstName,
-    lastName,
+    first_name,
+    last_name,
     email,
     phone,
     roleId,
@@ -450,11 +486,10 @@ export async function searchUsers(criteria) {
     take
   } = criteria;
 
-  // Construction des conditions de recherche
   const where = {};
 
-  if (firstName) {
-    where.first_name = { contains: firstName };
+  if (first_name) {
+    where.first_name = { contains: first_name };
   }
 
   if (lastName) {
@@ -499,4 +534,23 @@ export async function searchUsers(criteria) {
       }
     }
   });
+}
+
+/**
+ * Vérifie si le mot de passe correspond à celui de l'utilisateur
+ * @param {number} userId - ID de l'utilisateur
+ * @param {string} password - Mot de passe à vérifier
+ * @returns {Promise<boolean>} True si le mot de passe est correct
+ */
+export async function verifyUserPassword(userId, password) {
+  const user = await prisma.user.findUnique({
+    where: { id: parseInt(userId) },
+    select: { password: true }
+  });
+
+  if (!user || !user.password) {
+    return false;
+  }
+
+  return bcrypt.compare(password, user.password);
 }

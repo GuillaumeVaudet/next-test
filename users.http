@@ -1,0 +1,68 @@
+### Variables globales
+@baseUrl = http://localhost:3000/api
+@userEmail = test@example.com
+@userPhone = +33612345678
+@userId = 2
+
+### 1. GET tous les utilisateurs
+GET {{baseUrl}}/users
+Accept: application/json
+
+### 2. GET tous les utilisateurs avec pagination
+GET {{baseUrl}}/users?page=1&limit=10
+Accept: application/json
+
+### 3. GET tous les utilisateurs avec relations
+GET {{baseUrl}}/users?includeRoles=true&includeOrganizations=true
+Accept: application/json
+
+### 4. GET tous les utilisateurs avec tri
+GET {{baseUrl}}/users?sortField=created_at&sortOrder=desc
+Accept: application/json
+
+### 5. POST Créer un nouvel utilisateur
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "email": "nouveau@example.com",
+  "password": "motdepasse123",
+  "first_name": "Prénom",
+  "last_name": "Nom",
+  "phone": "+33612345679",
+  "roles": [9],
+  "organizations": []
+}
+
+### 6. GET un utilisateur par ID
+GET {{baseUrl}}/users/{{userId}}
+Accept: application/json
+
+### 7. GET un utilisateur par ID avec relations
+GET {{baseUrl}}/users/{{userId}}?includeRoles=true&includeOrganizations=true
+Accept: application/json
+
+### 8. PATCH Mettre à jour un utilisateur
+PATCH {{baseUrl}}/users/{{userId}}
+Content-Type: application/json
+
+{
+  "first_name": "NouveauPrénom",
+  "last_name": "NouveauNom"
+}
+
+### 9. DELETE Supprimer un utilisateur
+DELETE {{baseUrl}}/users/{{userId}}
+Accept: application/json
+
+### 10. GET un utilisateur par email
+GET {{baseUrl}}/users/{{userEmail}}
+Accept: application/json
+
+### 11. GET un utilisateur par email avec relations
+GET {{baseUrl}}/users/{{userEmail}}?includeRoles=true
+Accept: application/json
+
+### 12. GET un utilisateur par téléphone
+GET {{baseUrl}}/users/{{userPhone}}
+Accept: application/json
